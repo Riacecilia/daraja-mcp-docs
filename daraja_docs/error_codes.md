@@ -7,13 +7,15 @@ aliases:
   - Troubleshooting
 last_verified: 2026-11-15
 ---
-# **API Error Codes Reference**
+# API Error Codes Reference
 
-M-Pesa Express returns errors across two distinct execution stages: synchronous **API Gateway HTTP errors** (returned immediately when an HTTP request fails validation, authentication, or routing before reaching the subscriber) and asynchronous **Transaction ResultCode values** (returned inside `stkCallback` payloads or `/mpesa/stkpushquery/v1/query` responses after M-Pesa processes the prompt).
+M-Pesa Express returns errors across two distinct execution stages: 
+- Synchronous API Gateway HTTP errors: Returned immediately when an HTTP request fails validation, authentication, or routing before reaching the subscriber
+- Asynchronous Transaction ResultCode: Returned inside `stkCallback` payloads or `/mpesa/stkpushquery/v1/query` responses after M-Pesa processes the prompt.
 
-## **Global API Gateway HTTP Errors**
+## Global API Gateway HTTP Errors
 
-### **HTTP 400 Errors (Bad Request and Token Validation)**
+### HTTP 400 Errors (Bad Request and Token Validation)
 
 Safaricom's API gateway returns these synchronous HTTP 400 errors immediately when the JSON request body fails parameter validation or when the OAuth bearer token is rejected at the request validation layer.
 
@@ -23,7 +25,7 @@ Safaricom's API gateway returns these synchronous HTTP 400 errors immediately wh
 | **400** | 400.002.05 | Invalid Request Payload | Malformed JSON syntax, missing required top-level keys, or missing Content-Type: application/json header. | Validate the JSON body syntax, confirm all required keys exist, and set Content-Type: application/json. |
 | **400** | 400.003.01 | Invalid Access Token | Expired, revoked, or malformed OAuth token rejected at the request validation layer. | Request a fresh bearer token from /oauth/v1/generate?grant\_type=client\_credentials and retry. |
 
-### **HTTP 404 and 405 Errors (Routing, Token, and Method Errors)**
+### HTTP 404 and 405 Errors (Routing, Token, and Method Errors)
 
 Safaricom's API gateway returns these synchronous HTTP 404 and 405 errors when the endpoint path, HTTP verb, Authorization header format, or bearer token fails gateway routing checks.
 
@@ -34,7 +36,7 @@ Safaricom's API gateway returns these synchronous HTTP 404 and 405 errors when t
 | **404** | 404.001.04 | Invalid Authentication Header | Missing Authorization header or missing Bearer prefix before the access token. | Set the Authorization header to Bearer \<access\_token\> with a single space after Bearer and retry. |
 | **405** | 405.001 | Method Not Allowed | Request was sent using GET or another unsupported HTTP verb instead of POST. | Send the request using the HTTP POST method. |
 
-### **HTTP 429 and 500 Errors (Rate Limits and Server Errors)**
+### HTTP 429 and 500 Errors (Rate Limits and Server Errors)
 
 Safaricom's API gateway returns these synchronous HTTP 429 and 500 errors when request rates exceed spike-arrest limits, when credentials or subscriber locks fail, or when `/mpesa/stkpushquery/v1/query` is polled while a prompt is still awaiting handset input.
 
