@@ -6,6 +6,21 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DOCS_DIR = PROJECT_ROOT / "daraja_docs"
 MAX_PAGE_CHARS = 50000
 
+GENERIC_HEADINGS = {
+    "overview",
+    "parameters",
+    "request",
+    "response",
+    "responses", 
+    "errors", 
+    "error codes",
+    "example",
+    "examples",
+    "authentification",
+    "headers",
+    "payload",
+}
+
 
 def check_file(file_path: Path) -> tuple[int, int]:
     errors = 0
@@ -19,6 +34,39 @@ def check_file(file_path: Path) -> tuple[int, int]:
     if char_count > MAX_PAGE_CHARS:
         print(f" [ERROR] Rule 1 (Page Size): {char_count:,} chars (~{approx_tokens:,} tokens) exceeds {MAX_PAGE_CHARS} limit.")
         errors +=1
+
+    # Rules 3, 4 and 5: Heading checks
+    in_code_block = False
+    previous_heading_level = 0   
+
+    for line in raw_text.splitlines():
+        stripped = line.strip()
+
+        #Toggle code block state so '# comments' inside code aren't treated as headings
+        if stripped.startswith("```"):
+            in_code_block= not in_code_block
+            continue
+
+        # Check Markdown headings outside code blocks
+        if not in_code_block and stripped.startswith("#"):
+            hashes= len(stripped) - len(stripped.lstrip("#"))
+            if hashes > 0 and len(stripped) > hashes and stripped[hashes] == " ":
+                heading_text= stripped[hashes+1 :].strip()
+
+                # Rule 3: No H4-H6 headings
+                if hashes >=4:
+                    print(f" [ERROR] Rule 3 (Deep Heading): H{hashes} found ('{stripped}'). Only H1-H3 allowed.")
+
+                # Rule 4: No skipped heading levels (e.g., H1 -> H3)
+                if previous_heading_level > 0 and hashes > previous_heading_level + 1:
+                    print(f"  [WARN]  Rule 4 (Skipped Level): '{stripped}' jumps from H{previous_heading_level} to H{hashes}.")
+                    warnings += 1
+                previous_heading_level = hashes
+
+                # Rule 5: No generic standalone headings
+                if hashes in (2, 3) and heading_text.lower() in GENERIC_HEADINGS:
+                    print(f"  [WARN]  Rule 5 (Generic Heading): '{stripped}' is too generic. Include the API/endpoint name.")
+                    warnings += 1
 
     return errors, warnings
 
