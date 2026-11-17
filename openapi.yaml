@@ -1,0 +1,239 @@
+openapi: 3.0.3
+info:
+  title: Daraja API (Safaricom)
+  description: >
+    Safaricom M-Pesa Daraja API for M-Pesa Express (STK Push) payments, status queries, and OAuth token generation.
+  version: 1.0.0
+  contact: 
+    name: Maria Cecilia
+servers:
+  - url: https://sandbox.safaricom.co.ke
+    description: Sandbox Environment
+tags:
+  - name: Authentication
+    description: OAuth 2.0 access token generation
+  - name: M-Pesa Express
+    description: STK Push payment initiation and status query operations
+paths:
+  /oauth/v1/generate:
+    get:
+      operationId: generateOauthToken
+      tags: 
+        - Authentication
+      summary: Generate OAuth Access Token
+      description: |
+        Generates a temporary access token which provides authentication to access all other M-Pesa endpoints.
+        The temporary access token expires in 3599 seconds (~1 hour).
+      security:
+        - basicAuth: []
+      parameters:
+        - in: query
+          name: grant_type
+          required: true
+          schema:
+            type: string
+            enum:
+              - client_credentials
+          description: "The OAuth 2.0 flow type used to exchange client credentials for a token. This is a constant value that must always be set to `client_credentials`."
+      responses:
+        "200":
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: "Temporary access_token that must be used as a bearer token value to authorise requests to all other mpesa endpoints. Pass this value as the Bearer <access token> in the authorisation header."
+                    example: cNvGf19rFhF48Xb0mAAQJ723h...
+                  expires_in:
+                    type: string
+                    description: "The lifespan of the access token in seconds from the moment of generation. Default: 3599."
+                    example: "3599"
+  /mpesa/stkpush/v1/processrequest:
+    post:
+      operationId: initiateStkPush
+      tags: 
+        - M-Pesa Express
+      summary: M-Pesa Express Payment Request (Prompt)
+      description: Allows a business to send a buy goods/pay bill payment prompt to a customer’s phone number.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - BusinessShortCode
+                - Password
+                - Timestamp
+                - TransactionType
+                - Amount
+                - PartyA
+                - PartyB
+                - PhoneNumber
+                - CallBackUrl
+                - AccountReference
+                - TransactionDesc
+              properties:
+                BusinessShortCode:
+                  type: number
+                  description: "The paybill or buygoods account number used to receive mpesa payments. Is between 5 and 7 digits."
+                  example: 174379
+                Password:
+                  type: string
+                  description: "Base64-encoded string used to authenticate the transaction request. Format: Base64(BusinessShortCode+Passkey+Timestamp). This is a dynamic value that must be generated at runtime."
+                Timestamp:
+                  type: string
+                  description: "Current time in YYYYMMDDHHmmss format in East Africa Time. Dynamic value. Must be generated at runtime in EAT and match the timestamp used in Password."
+                TransactionType:
+                  type: string
+                  enum:
+                    - CustomerPayBillOnline
+                    - CustomerBuyGoodsOnline
+                  description: "Payment method either Paybill or Buy Goods."
+                Amount:
+                  type: number
+                  minimum: 1
+                  maximum: 999999999
+                  description: "Amount of money requested to the customer."
+                  example: 1
+                PartyA:
+                  type: number
+                  description: "Mobile phone number of the customer making payment in MSISDN format. Registered Safaricom MSISDN (12 digits: 254XXXXXXXXX)."
+                  example: 254708374149
+                PartyB:
+                  type: number
+                  description: "The business paybill or till account number used to receive payments. Party B and the BusinessShortCode are identical."
+                  example: 174379
+                PhoneNumber:
+                  type: number
+                  description: "The mobile number to receive the USSD prompt. Can be the same as PartyA."
+                  example: 254708374149
+                CallBackUrl:
+                  type: string
+                  format: uri
+                  description: "The URL where the payment gateway will send the result. For sandbox: https://mydomain.com/mpesa-express-simulate/. In production, use a publicly routable HTTPS URL (use ngrok/cloudflared locally). Avoid reserved words (mpesa, safaricom, sql, exec)."
+                AccountReference:
+                  type: string
+                  minLength: 2
+                  maxLength: 12
+                  description: "Alphanumeric code which links the payment to a specific customer/invoice. Assigned by the business’ own system. 2–12 alphanumeric characters shown on the customer's USSD prompt."
+                  example: CompanyXLTD
+                TransactionDesc:
+                  type: string
+                  minLength: 2
+                  maxLength: 13
+                  description: "Description of the purpose of payment. 2–13 characters. Empty or whitespace-only values trigger HTTP 400."
+                  example: Payment of X
+      responses:
+        "200":
+          description: Success. Request accepted for processing.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  MerchantRequestID:
+                    type: string
+                    description: "Assigned by Safaricom for every M-Pesa Express (/processrequest) call. Used to trace the inbound API call through their gateway logs."
+                    example: 3197-4224-a7b4-26167e300ff8201468
+                  CheckoutRequestID:
+                    type: string
+                    description: "A unique tracking identifier generated by Safaricom for an initiated checkout session (STK Push prompt). Serves as the primary key to poll payment status via /query and to match incoming asynchronous callbacks to your database records. ⚠️ Dynamic stateful value."
+                    example: ws_CO_071120261312046708374149
+                  ResponseCode:
+                    type: string
+                    description: "A code that indicates the gateway status of the API request. '0' is for a successful API request. Indicates that it was dispatched to the customer. Any non-zero value means the gateway encountered an internal or routing error."
+                    example: "0"
+                  ResponseDescription:
+                    type: string
+                    description: "A human-readable service status message returned by the API gateway."
+                    example: Success. Request accepted for processing
+                  CustomerMessage:
+                    type: string
+                    description: "A pre-formatted acknowledgment message that the prompt was dispatched. ⚠️ UI Trap: Despite the name and the word 'Success', this does not confirm payment. Do not display this verbatim to end-users as a confirmation screen."
+                    example: Success. Request accepted for processing
+  /mpesa/stkpushquery/v1/query:
+    post:
+      operationId: queryStkPushStatus
+      tags:
+        - M-Pesa Express 
+      summary: M-Pesa Express Query
+      description: |
+        Queries the status of an initiated M-Pesa Express Payment Request (Prompt) session using its CheckoutRequestID. 
+        Used to determine whether the customer completed payment, cancelled the prompt, or let the session expire.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - BusinessShortCode
+                - Password
+                - Timestamp
+                - CheckoutRequestID
+              properties:
+                BusinessShortCode:
+                  type: string
+                  description: "The paybill or buygoods account number used to receive mpesa payments. Is between 5 and 7 digits."
+                  example: "174379"
+                Password:
+                  type: string
+                  description: "Base64-encoded string used to authenticate the transaction request. Format: Base64(BusinessShortCode + Passkey + Timestamp). ⚠️ Dynamic value. Must be generated at runtime."
+                Timestamp:
+                  type: string
+                  description: "Current time in YYYYMMDDHHmmss format in East Africa Time. ⚠️ Dynamic value. Must be generated at runtime fresh for each request."
+                CheckoutRequestID:
+                  type: string
+                  description: "A unique tracking identifier generated by Safaricom for an initiated checkout session (STK Push prompt). Serves as the primary key to poll payment status via /query and to match incoming asynchronous callbacks to your database records."
+      responses:
+        "200":
+          description: Query response retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ResponseCode:
+                    type: string
+                    description: "Indicates the status of the API request. '0' means the API request lookup succeeded; any non-zero value means the gateway encountered an internal or routing error."
+                    example: "0"
+                  ResponseDescription:
+                    type: string
+                    description: "A human-readable service status message returned by the API gateway."
+                    example: The service request has been accepted successfully
+                  MerchantRequestID:
+                    type: string
+                    description: "A unique tracking string generated by Safaricom's gateway for the inbound API request. It identifies the merchant's call on Safaricom's web servers and pairs with CheckoutRequestID to trace the session in server logs."
+                    example: d70d-40dc-a8f8-b6ab4cfc3b0e360414
+                  CheckoutRequestID:
+                    type: string
+                    description: "A unique session tracking identifier generated by Safaricom for the STK Push prompt initiated on the customer's phone."
+                    example: ws_CO_051120262149423708374149
+                  ResultCode:
+                    type: string
+                    description: "Indicates the outcome of the payment transaction. 0 is returned for a successful payment. Any other code means that the payment failed. Common failure resultcodes: 1032 is returned if the user cancelled the transaction."
+                    example: "1037"
+                  ResultDesc:
+                    type: string
+                    description: "A human readable explanation that describes the final outcome of the payment transaction."
+                    example: No response from user.
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: "Base64-encoded string of your Consumer Key and Consumer Secret separated by a colon."
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "Temporary access_token generated from /oauth/v1/generate that must be used to authorise requests to all other mpesa endpoints."
+
+
